@@ -1,4 +1,4 @@
-# Pipelinedatos app
+# Pipelinedatos con UI
 
 ## Run the app
 

@@ -56,6 +56,12 @@ def main(page: ft.Page):
     COLOR_ERROR     = ft.Colors.RED_700
     COLOR_FONDO_BOX = ft.Colors.BLUE_50
     COLOR_FONDO_ARCH = ft.Colors.SECONDARY_CONTAINER
+    COLOR_INFO = ft.Colors.GREY_600
+    COLOR_CARGA = ft.Colors.LIGHT_GREEN_ACCENT_400
+    COLOR_TRANSPARENTE = ft.Colors.TRANSPARENT
+    COLOR_LISTA = ft.Colors.GREY_300
+    COLOR_SUBTITULO = ft.Colors.GREY_700
+    COLOR_FONDO_MJS = ft.Colors.GREEN_ACCENT_100
 
     # ── Normalización de columnas ────────────────────────────────────────────
     def normalizar_columnas(df):
@@ -81,20 +87,17 @@ def main(page: ft.Page):
     lv_archivos = ft.ListView(
         spacing=4,
         padding=ft.Padding.symmetric(horizontal=2),
-        
     )
-    loading = ft.ProgressRing(width=25, height=25, stroke_width=5, color=ft.Colors.YELLOW, visible=False)
-    
-    resultado_texto = ft.Text("", size=14)
+    loading = ft.ProgressRing(width=25, height=25, stroke_width=5, color=COLOR_CARGA, visible=False)
+        
+    resultado_texto = ft.Text("", size=14, selectable=True, expand=False,)
     resultado_card = ft.Card(
-        content=ft.Container(content=resultado_texto, padding=16, height=200),
+        content=ft.Container(content=resultado_texto, padding=16),
         visible=False,
-        # border=ft.Border.all(1, ft.Colors.GREY_300),
-        # border_radius=12,
     )
     
     contador_text = ft.Text(
-        "0 archivo(s) seleccionado(s)", size=12, color=ft.Colors.GREY_600
+        "0 archivo(s) seleccionado(s)", size=12, color=COLOR_INFO
     )
     
     btn_procesar = ft.FilledButton(
@@ -103,6 +106,10 @@ def main(page: ft.Page):
 
     btn_abrir_carpeta = ft.OutlinedButton(
         "Abrir carpeta", icon=ft.Icons.FOLDER_OPEN, visible=False,
+    )
+    
+    msj_text = ft.Text(
+        "", size=24, color=COLOR_INFO, visible=False, bgcolor = COLOR_FONDO_MJS
     )
     
     # 2. REFRESCAR LISTA ASYNC
@@ -117,7 +124,7 @@ def main(page: ft.Page):
                 ft.ListTile(
                     leading=ft.Icon(ft.Icons.INSERT_DRIVE_FILE, color=COLOR_PRIMARIO),
                     title=ft.Text(nombre, weight=ft.FontWeight.W_500),
-                    subtitle=ft.Text(subtitulo, size=10, color=ft.Colors.GREY_600),
+                    subtitle=ft.Text(subtitulo, size=10, color=COLOR_INFO),
                     trailing=ft.IconButton(
                         ft.Icons.CLOSE,
                         tooltip="Quitar archivo",
@@ -129,6 +136,7 @@ def main(page: ft.Page):
             )
         contador_text.value = f"{len(lista_archivos)} archivo(s) seleccionado(s)"
         btn_procesar.disabled = len(lista_archivos) == 0
+        msj_text.visible = len(lista_archivos) >= 1
         page.update()
     
     def quitar_archivo(e):
@@ -141,8 +149,6 @@ def main(page: ft.Page):
     # 1. Crear FilePicker
     # 2. Agregar a services
     # 3. page.update()  ← registra el control en el cliente JS
-    # 4. Asignar on_result
-    # 5. page.add() con el resto del layout
     # 1. crear
     # file_picker = ft.FilePicker()        # ✔ sin argumentos
     # 2. registrar
@@ -150,16 +156,12 @@ def main(page: ft.Page):
     # 3. renderizar
     # page.update()
     
-    # luego llamas otra vez
-    # await file_picker.pick_files()  # 💥 timeout
-    
     # 4. MANEJADOR DE CLIC ASYNC (Aquí se resuelve el RuntimeWarning)
     def abrir_selector(e):
         page.run_task(abrir_picker_async)
 
     async def abrir_picker_async():
-        await asyncio.sleep(0.1)  # 🔑 da tiempo a registrar
-        
+        await asyncio.sleep(0)  # 🔑 da tiempo a registrar
         picker = ft.FilePicker()
         page.services.append(picker)
         page.update()
@@ -189,25 +191,18 @@ def main(page: ft.Page):
             refrescar_lista()
         except Exception as e:
             print("Error picker:", e)
+            msj_text.value = str(e)
             return
-        
-    # Lógica de procesamiento simplificada
-    def procesar_consolida_datos(e):
-        print("🟢 Procesando... ")
-        loading.visible = True
+    
+    
+    async def procesar_async():
         if not lista_archivos:
             snack_bar = ft.SnackBar(content=ft.Text("No hay archivos seleccionados"))
             page.overlay.append(snack_bar)
             snack_bar.open = True
             page.update()
             return
-        # mensaje en pa
-        btn_procesar.disabled = True
-        btn_procesar.text = "Procesando..."
-        btn_procesar.icon = ft.Icons.HOURGLASS_TOP
-        # revisar elementos
-        resultado_card.visible = False
-        btn_abrir_carpeta.visible = False
+        
         snack_bar = ft.SnackBar(content=ft.Text("Procesando archivos espere..."))
         page.overlay.append(snack_bar)
         snack_bar.open = True
@@ -215,7 +210,6 @@ def main(page: ft.Page):
         
         salida = {}
         try:
-            # (Aquí va tu lógica de pandas.read_excel y concat)
             # Transformación
             dataframes = []
             for item in lista_archivos:
@@ -224,9 +218,9 @@ def main(page: ft.Page):
                 df_temp = normalizar_columnas(df_temp)
                 dataframes.append(df_temp)
 
-            # C. Concatenar primero
+            # Concatenar primero
             df = pd.concat(dataframes, ignore_index=True)
-            # D. Optimización de memoria: Eliminar duplicados ANTES de ordenar 
+            # Optimización de memoria: Eliminar duplicados ANTES de ordenar 
             df.drop_duplicates(inplace=True)
             if "fecha_gestion" in df.columns:
                 # Convertir a datetime solo para ordenar si es necesario, 
@@ -236,7 +230,7 @@ def main(page: ft.Page):
             fecha_act = datetime.now().strftime("%Y%m%d%H%M%S")
             nombre_archivo = f"ReporteConsolidado_{fecha_act}.xlsx"
             logger.info(f"✅ {len(lista_archivos)} archivos. {len(df)} filas únicas.")
-            # Creación del archivo "xlsxwriter" procesa los datos mas rapido
+            # Creación del archivo "xlsxwriter" procesa los datos mas rápido
             with pd.ExcelWriter(nombre_archivo, engine="xlsxwriter") as writer:
                 df.to_excel(writer, index=False, sheet_name="Consolidado")
             
@@ -253,7 +247,7 @@ def main(page: ft.Page):
                 
                 salida.update({
                     "estado": "Ok",
-                    "mesaje": 'Archivo creado exitosamente',
+                    "mensaje": 'Archivo creado exitosamente',
                     "archivo": nombre_archivo,
                     "ruta": ubicacionArch,
                     "tamaño_bytes": tamArch,
@@ -269,8 +263,14 @@ def main(page: ft.Page):
                     f"🗂️  Columnas:  {len(df.columns)}\n"
                     f"💾  Tamaño:   {tamArch:,} bytes"
                 )
+                # Se limpia la lista de archivos, con los que va a trabajar
+                lista_archivos.clear()
+                # Se limpia la lista de archivos, a nivel de pantalla
+                refrescar_lista()
+                
                 resultado_texto.color = COLOR_EXITO
-                btn_abrir_carpeta.visible = not page.web  # Solo en desktop
+                btn_abrir_carpeta.visible = True
+                msj_text.value = "🔽 Haga scroll o deslice 🔽"
                 snack_bar = ft.SnackBar(
                     content=ft.Text(f"✅ Archivo creado: {nombre_archivo}"),
                     bgcolor=COLOR_EXITO,
@@ -280,11 +280,12 @@ def main(page: ft.Page):
                 page.update()
             else:
                 salida['estado'] = 'Error'
-                salida['mensaje'] = '❌ El archivo no se encuentra después de guardar'
+                salida['mensaje'] = '❌ El archivo no se encontró tras guardar.'
                 # Simulación de éxito para el ejemplo:
                 resultado_texto.value = salida['mensaje']
                 resultado_texto.color = COLOR_ERROR
-                btn_abrir_carpeta.visible = not page.web
+                btn_abrir_carpeta.visible = False
+                msj_text.value = "🔽 Haga scroll o deslice 🔽"
                 logger.error(f"{salida['estado']} {salida['mensaje']}")
                 snack_bar = ft.SnackBar(content=ft.Text(salida['mensaje']))
                 page.overlay.append(snack_bar)
@@ -292,22 +293,42 @@ def main(page: ft.Page):
                 # raise FileNotFoundError("El archivo no se encontró tras guardar.")
                 page.update()
         except Exception as ex:
-            salida.update({"estado": "Error", "mensaje": str(ex)})
-            resultado_texto.value = f"❌ Error: {str(ex)}"
+            errorMjs = f"❌ Error al crear el archivo"
+            salida.update({"estado": "Error", "mensaje": errorMjs})
+            resultado_texto.value = errorMjs
             resultado_texto.color = COLOR_ERROR
             btn_abrir_carpeta.visible = False
-            snack_bar = ft.SnackBar(content=ft.Text(f"❌ Error: {str(ex)}"), bgcolor=COLOR_ERROR)
+            msj_text.value = "🔽 Haga scroll o deslice 🔽"
+            snack_bar = ft.SnackBar(content=ft.Text(errorMjs), bgcolor=COLOR_ERROR)
             page.overlay.append(snack_bar)
             snack_bar.open = True
             logger.error(f"❌ Error al procesar: {str(ex)}")
             page.update()
+        finally:
+            loading.visible = False
+            msj_text.visible = True
+            resultado_card.visible = True
+            btn_procesar.disabled = True
+            btn_procesar.text = "Iniciar Consolidación"
+            btn_procesar.icon = ft.Icons.PLAY_ARROW
+            page.update()
         
-        loading.visible = False                                           
-        resultado_card.visible = True
-        btn_procesar.disabled = False
-        btn_procesar.text = "Iniciar Consolidación"
-        btn_procesar.icon = ft.Icons.PLAY_ARROW
-        page.update()
+            
+    # Lógica de procesamiento simplificada
+    def procesar_consolida_datos(e):
+        # revisar elementos
+        loading.visible = True
+        btn_abrir_carpeta.visible = False
+        msj_text.visible = True
+        resultado_card.visible = False
+        btn_procesar.disabled = True
+        # Cambios a elementos antes de renderizar
+        msj_text.value = "🟢 Procesando..."
+        btn_procesar.text = "Espere..."
+        btn_procesar.icon = ft.Icons.HOURGLASS_TOP
+        
+        page.update()  # 🔑 FORZAR RENDER
+        page.run_task(procesar_async)
     
     def abrir_carpeta(e):
         ruta = ultima_ruta_archivo["valor"]
@@ -332,7 +353,7 @@ def main(page: ft.Page):
             [
                 ft.Icon(ft.Icons.CLOUD_UPLOAD_OUTLINED, size=48, color=COLOR_PRIMARIO),
                 ft.Text("Haz clic para seleccionar archivos Excel", size=16, weight=ft.FontWeight.W_500, color=COLOR_PRIMARIO),
-                ft.Text("Formatos admitidos: .xlsx  •  .xls", size=12, color=ft.Colors.GREY_600),
+                ft.Text("Formatos admitidos: .xlsx  •  .xls", size=12, color=COLOR_INFO),
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=8
@@ -350,14 +371,14 @@ def main(page: ft.Page):
     # Se usa height fijo para el contenedor de la lista, o se omite para que crezca solo
     contenedor_lista = ft.Container(
         content=lv_archivos,
-        border=ft.Border.all(1, ft.Colors.GREY_300),
+        border=ft.Border.all(1, COLOR_LISTA),
         border_radius=12,
         height=200,
         padding=4,
     )
     
     titulo = ft.Text(lblTitulo, size=28, weight=ft.FontWeight.BOLD, text_align=ft.Alignment.CENTER)
-    subtitulo = ft.Text(lblSubtitulo, size=14, color=ft.Colors.GREY_700, text_align=ft.Alignment.CENTER),
+    subtitulo = ft.Text(lblSubtitulo, size=14, color=COLOR_SUBTITULO, text_align=ft.Alignment.CENTER),
     # Pantalla principal
     page.add(
         ft.ResponsiveRow(
@@ -380,7 +401,7 @@ def main(page: ft.Page):
                         ft.ResponsiveRowBreakpoint.LG: 12,
                     },
                 ),
-                ft.Divider(height=16, color=ft.Colors.TRANSPARENT),
+                ft.Divider(height=16, color=COLOR_TRANSPARENTE),
                 ft.Container(
                     # Zona de selección
                     content=zona_drop,
@@ -391,7 +412,7 @@ def main(page: ft.Page):
                         ft.ResponsiveRowBreakpoint.LG: 12,
                     },
                 ),
-                ft.Divider(height=16, color=ft.Colors.TRANSPARENT),
+                ft.Divider(height=16, color=COLOR_TRANSPARENTE),
                 # Label para salidas
                 ft.Container(
                     content=ft.Row(
@@ -418,11 +439,14 @@ def main(page: ft.Page):
                         ft.ResponsiveRowBreakpoint.LG: 12,
                     },
                 ),
-                ft.Divider(height=16, color=ft.Colors.TRANSPARENT),
+                ft.Divider(height=16, color=COLOR_TRANSPARENTE),
                 ft.Container(
                     # Botón de búsqueda
-                    content=ft.Row(
-                        [btn_procesar, loading, btn_abrir_carpeta],
+                    content=ft.Column(
+                        [
+                            ft.Row([btn_procesar, loading]),
+                            ft.Row([btn_abrir_carpeta, msj_text]),
+                        ],
                         alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                     ),
                     padding=2,
@@ -432,9 +456,9 @@ def main(page: ft.Page):
                         ft.ResponsiveRowBreakpoint.LG: 12,
                     },
                 ),
-                ft.Divider(height=16, color=ft.Colors.TRANSPARENT),
+                ft.Divider(height=16, color=COLOR_TRANSPARENTE),
                 ft.Container(
-                    # Lista de archivos
+                    # Salida de la compilación
                     content=resultado_card,
                     padding=2,
                     col={
