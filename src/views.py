@@ -3,7 +3,7 @@ import os
 
 class PipelineView:
     """
-    Capa de Vista (MVC): Interfaz gráfica con scroll general en la página para visualizar el resultado inferior.
+    Capa de Vista (MVC): Interfaz gráfica con scroll interno en archivos y scroll general en la ventana.
     """
     def __init__(self, page: ft.Page, controller):
         self.page = page
@@ -22,7 +22,7 @@ class PipelineView:
             self.page.window.icon = icon_path
 
         self.page.padding = 20
-        self.page.scroll = ft.ScrollMode.AUTO  # 🔑 Reactivamos el scroll global de la ventana
+        self.page.scroll = ft.ScrollMode.AUTO  # Scroll general de la ventana
         self.page.vertical_alignment = ft.CrossAxisAlignment.CENTER
         self.page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
@@ -36,7 +36,7 @@ class PipelineView:
         COLOR_FONDO_BOX = ft.Colors.BLUE_50
         COLOR_FONDO_ARCH = ft.Colors.SECONDARY_CONTAINER
 
-        # ListView con scroll interno habilitado exclusivamente para la lista de archivos
+        # ListView con scroll interno exclusivo para la lista de archivos
         self.lv_archivos = ft.ListView(
             spacing=4,
             padding=ft.Padding.symmetric(horizontal=2),
