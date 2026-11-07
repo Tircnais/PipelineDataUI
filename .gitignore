@@ -161,4 +161,13 @@ cython_debug/
 
 # Flet
 storage/
+
+*.pyc
+
+# Directorios de ejecución o temporales
+.pytest_cache/
+build/
+Consolidado Histórico/
 logs/
+__pycache__/
+*.pyc
