@@ -22,7 +22,7 @@ class PipelineView:
             self.page.window.icon = icon_path
 
         self.page.padding = 20
-        self.page.scroll = ft.ScrollMode.AUTO  # Scroll general de la ventana
+        self.page.scroll = ft.ScrollMode.AUTO
         self.page.vertical_alignment = ft.CrossAxisAlignment.CENTER
         self.page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
 
@@ -36,7 +36,6 @@ class PipelineView:
         COLOR_FONDO_BOX = ft.Colors.BLUE_50
         COLOR_FONDO_ARCH = ft.Colors.SECONDARY_CONTAINER
 
-        # ListView con scroll interno exclusivo para la lista de archivos
         self.lv_archivos = ft.ListView(
             spacing=4,
             padding=ft.Padding.symmetric(horizontal=2),
@@ -113,6 +112,38 @@ class PipelineView:
             tooltip="Haz clic para seleccionar archivos Excel",
         )
 
+        # 🔑 NOTA DE ADVERTENCIA SOBRE EL LÍMITE DE REGISTROS (1M)
+        tarjeta_aviso_limite = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.INFO_OUTLINED, color=ft.Colors.AMBER_800, size=22),
+                    ft.Column(
+                        [
+                            ft.Text(
+                                "Consideración de capacidad:",
+                                weight=ft.FontWeight.BOLD,
+                                size=12,
+                                color=ft.Colors.AMBER_900,
+                            ),
+                            ft.Text(
+                                "Si la consolidación supera 1.000.000 de registros, se exportará automáticamente en formato CSV (.csv) "
+                                "debido al límite físico de Microsoft Excel (1,048,576 filas max) y para optimizar la memoria RAM.",
+                                size=11,
+                                color=ft.Colors.GREY_800,
+                            ),
+                        ],
+                        spacing=2,
+                        expand=True,
+                    ),
+                ],
+                vertical_alignment=ft.CrossAxisAlignment.START,
+            ),
+            bgcolor=ft.Colors.AMBER_50,
+            border=ft.Border.all(1, ft.Colors.AMBER_300),
+            border_radius=8,
+            padding=10,
+        )
+
         contenedor_lista = ft.Container(
             content=self.lv_archivos,
             border=ft.Border.all(1, COLOR_LISTA),
@@ -129,9 +160,10 @@ class PipelineView:
                 controls=[
                     ft.Container(content=titulo, padding=2, col={ft.ResponsiveRowBreakpoint.XS: 12}),
                     ft.Container(content=subtitulo, padding=2, col={ft.ResponsiveRowBreakpoint.XS: 12}),
-                    ft.Divider(height=16, color=COLOR_TRANSPARENTE),
+                    ft.Divider(height=12, color=COLOR_TRANSPARENTE),
                     ft.Container(content=zona_drop, padding=2, col={ft.ResponsiveRowBreakpoint.XS: 12}),
-                    ft.Divider(height=16, color=COLOR_TRANSPARENTE),
+                    ft.Container(content=tarjeta_aviso_limite, padding=2, col={ft.ResponsiveRowBreakpoint.XS: 12}), # 🔑 Banner informativo visible
+                    ft.Divider(height=12, color=COLOR_TRANSPARENTE),
                     ft.Container(
                         content=ft.Row(
                             [
@@ -144,7 +176,7 @@ class PipelineView:
                         col={ft.ResponsiveRowBreakpoint.XS: 12},
                     ),
                     ft.Container(content=contenedor_lista, padding=2, col={ft.ResponsiveRowBreakpoint.XS: 12}),
-                    ft.Divider(height=16, color=COLOR_TRANSPARENTE),
+                    ft.Divider(height=12, color=COLOR_TRANSPARENTE),
                     ft.Container(
                         content=ft.Column(
                             [
@@ -158,7 +190,7 @@ class PipelineView:
                         padding=2,
                         col={ft.ResponsiveRowBreakpoint.XS: 12},
                     ),
-                    ft.Divider(height=16, color=COLOR_TRANSPARENTE),
+                    ft.Divider(height=12, color=COLOR_TRANSPARENTE),
                     ft.Container(content=self.resultado_card, padding=2, col={ft.ResponsiveRowBreakpoint.XS: 12}),
                 ],
             ),

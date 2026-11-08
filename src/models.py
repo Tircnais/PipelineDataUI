@@ -8,8 +8,11 @@ import asyncio
 
 class PipelineModel:
     """
-    Capa de Modelo (MVC): Gestiona logs, validación de esquemas, transacciones atómicas y mapeo de columnas.
+    Capa de Modelo (MVC): Gestiona logs, validación de esquemas, transacciones atómicas,
+    mapeo de columnas y selección automática del formato de salida (XLSX vs CSV).
     """
+    LIMITE_FILAS_EXCEL = 1000000  # Umbral de 1 Millón de filas
+
     def __init__(self, logs_dir: str):
         self.logs_dir = logs_dir
         self._configurar_logging(self.logs_dir)
@@ -51,7 +54,7 @@ class PipelineModel:
         for item in lista_archivos:
             directorio = item["ruta"] if item["ruta"] else io.BytesIO(item["datos"])
             try:
-                df_temp = pd.read_excel(directorio, nrows=0, dtype=str) # Solo lee la cabecera
+                df_temp = pd.read_excel(directorio, nrows=0, dtype=str)
                 cols = [str(c).strip() for c in df_temp.columns]
                 columnas_por_archivo[item["nombre"]] = cols
                 conjuntos_columnas.append(set(cols))
@@ -59,11 +62,8 @@ class PipelineModel:
                 self.logger.error(f"❌ Error leyendo cabecera de {item['nombre']}: {str(ex)}")
                 raise ValueError(f"No se pudo leer el archivo: {item['nombre']}")
 
-        # Verificar si todos los archivos tienen exactamente el mismo conjunto de columnas
         primer_set = conjuntos_columnas[0]
         columnas_iguales = all(s == primer_set for s in conjuntos_columnas)
-
-        # Recopilar todas las columnas únicas existentes entre los archivos
         todas_unicas = sorted(list(set(col for cols in columnas_por_archivo.values() for col in cols)))
 
         return not columnas_iguales, columnas_por_archivo, todas_unicas
@@ -103,9 +103,8 @@ class PipelineModel:
 
             df_temp.columns = [str(col).strip() for col in df_temp.columns]
 
-            # Aplicar mapeo personalizado si el usuario lo proporcionó para este archivo
             if mapeo_columnas and nombre_corto in mapeo_columnas:
-                mapa_archivo = mapeo_columnas[nombre_corto] # ej: {"Identificador": "ID", "id_registro": "ID"}
+                mapa_archivo = mapeo_columnas[nombre_corto]
                 df_temp.rename(columns=mapa_archivo, inplace=True)
 
             dataframes.append(df_temp)
@@ -134,8 +133,14 @@ class PipelineModel:
             except Exception:
                 pass
 
+        total_filas = len(df)
+        es_csv = total_filas > self.LIMITE_FILAS_EXCEL
+
+        formato_str = "CSV" if es_csv else "XLSX"
+        self.logger.info(f"📊 Registros totales: {total_filas:,}. Formato asignado: {formato_str}")
+
         if progress_callback:
-            progress_callback(0.93, "💾 Guardando archivo (Transacción Atómica)...")
+            progress_callback(0.93, f"💾 Guardando {formato_str} ({total_filas:,} filas)...")
             await asyncio.sleep(0.05)
 
         carpeta_salida = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "Consolidado Histórico"))
@@ -143,48 +148,61 @@ class PipelineModel:
             os.makedirs(carpeta_salida, exist_ok=True)
 
         fecha_act = datetime.now().strftime("%Y%m%d%H%M%S")
-        nombre_archivo = f"ReporteConsolidado_{fecha_act}.xlsx"
-        ruta_completa = os.path.join(carpeta_salida, nombre_archivo)
-        
-        # 🔑 Usamos una extensión .xlsx válida para el archivo temporal
-        ruta_temporal = os.path.join(carpeta_salida, f"temp_{nombre_archivo}")
-        
-        self.logger.info(f"💾 Escribiendo archivo temporal en: {ruta_temporal}...")
-        
-        def escribir_excel():
-            with pd.ExcelWriter(ruta_temporal, engine="xlsxwriter") as writer:
-                df.to_excel(writer, index=False, sheet_name="Consolidado")
 
-        await asyncio.to_thread(escribir_excel)
-        
-        # Transacción Atómica: Reemplazar el final si el temporal existe y es válido
+        # 🔑 Determinación dinámica del tipo de archivo y transacción atómica
+        if es_csv:
+            nombre_archivo = f"ReporteConsolidado_{fecha_act}.csv"
+            ruta_completa = os.path.join(carpeta_salida, nombre_archivo)
+            ruta_temporal = os.path.join(carpeta_salida, f"temp_{nombre_archivo}")
+            
+            self.logger.info(f"💾 Guardando archivo masivo CSV temporal en: {ruta_temporal}...")
+            
+            def escribir_csv():
+                df.to_csv(ruta_temporal, index=False, encoding="utf-8-sig")
+
+            await asyncio.to_thread(escribir_csv)
+        else:
+            nombre_archivo = f"ReporteConsolidado_{fecha_act}.xlsx"
+            ruta_completa = os.path.join(carpeta_salida, nombre_archivo)
+            ruta_temporal = os.path.join(carpeta_salida, f"temp_{nombre_archivo}")
+            
+            self.logger.info(f"💾 Guardando archivo XLSX temporal en: {ruta_temporal}...")
+            
+            def escribir_excel():
+                with pd.ExcelWriter(ruta_temporal, engine="xlsxwriter") as writer:
+                    df.to_excel(writer, index=False, sheet_name="Consolidado")
+
+            await asyncio.to_thread(escribir_excel)
+
+        # Transacción Atómica: Renombrar temporal a final
         if os.path.exists(ruta_temporal):
             if os.path.exists(ruta_completa):
                 os.remove(ruta_completa)
             os.rename(ruta_temporal, ruta_completa)
         else:
-            raise IOError("El archivo temporal de consolidación no pudo ser generado.")
+            raise IOError(f"El archivo temporal {formato_str} no pudo ser generado.")
 
         if progress_callback:
-            progress_callback(1.0, "✅ ¡Consolidación completada con éxito!")
+            progress_callback(1.0, f"✅ ¡Consolidación completada en formato {formato_str}!")
             await asyncio.sleep(0.05)
 
         if os.path.exists(ruta_completa):
             tamArch_bytes = os.path.getsize(ruta_completa)
             tamArch_mb = tamArch_bytes / (1024 * 1024)
             
-            self.logger.info(f"✅ Proceso completado con éxito. {len(df)} filas procesadas.")
+            self.logger.info(f"✅ Proceso completado con éxito. {total_filas:,} filas guardadas en {formato_str}.")
             self.logger.info(f"📁 Ubicación: {ruta_completa}")
             self.logger.info(f"📊 Tamaño: {tamArch_mb:.2f} MB")
             
             return {
                 "estado": "Ok",
-                "mensaje": "Archivo creado exitosamente",
+                "mensaje": f"Archivo {formato_str} creado exitosamente",
                 "archivo": nombre_archivo,
                 "ruta": ruta_completa,
                 "tamaño": f"{tamArch_mb:.2f} MB",
-                "filas": len(df),
+                "filas": f"{total_filas:,}",
                 "columnas": len(df.columns),
+                "formato": formato_str
             }
         else:
             self.logger.error("❌ El archivo no se encontró tras guardar.")
